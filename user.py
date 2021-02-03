@@ -1,22 +1,37 @@
+from __future__ import annotations
+
+from contextlib import contextmanager
+from dataclasses import dataclass
+from typing import Dict, List, Optional
 from uuid import UUID, uuid4
 
-from typing import Optional
 from passlib.context import CryptContext
-from pydantic import BaseModel
-from sqlalchemy import Column, LargeBinary, String, create_engine
+from sqlalchemy import Column, String, create_engine
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm.session import sessionmaker
-
+from sqlalchemy.orm import Session
 from starlette.authentication import BaseUser
 
-engine = create_engine("sqlite:///:memory:", echo=True)
+engine = create_engine("sqlite:///:memory:")
 
 Base = declarative_base()
 
-Session = sessionmaker()
-Session.configure(bind=engine)
-
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
+
+
+class NonUniqueException(Exception):
+    pass
+
+
+@contextmanager
+def session_manager():
+    session = Session(engine)
+    try:
+        yield session
+    except:
+        session.rollback()
+        raise
+    finally:
+        session.close()
 
 
 class _DBUser(Base):
@@ -30,40 +45,37 @@ class _DBUser(Base):
     def from_user(cls, user: "User") -> "_DBUser":
         return cls(uuid=str(user.uuid), username=user.username, hash=user.hash)
 
+    def to_user(self) -> "User":
+        return User(uuid=UUID(self.uuid), username=self.username, hash=self.hash)
+
     @classmethod
-    def from_username(cls, username: str) -> Optional["_DBUser"]:
-        session = Session()
-        users = [x for x in session.query(_DBUser).filter_by(username=username)]
+    def query_unique(cls, session: Session, query: Dict[str, str]) -> Optional[_DBUser]:
+        users = cls.query(session, query)
         if len(users) == 0:
             return
         if len(users) > 1:
-            return Exception("Multiple users with same username")  # TODO: Handle better
+            return NonUniqueException
         user = users[0]
         return cls(uuid=str(user.uuid), username=user.username, hash=user.hash)
 
     @classmethod
-    def from_uuid(cls, uuid: str) -> Optional["_DBUser"]:
-        session = Session()
-        users = [x for x in session.query(_DBUser).filter_by(uuid=uuid)]
-        if len(users) == 0:
-            return
-        if len(users) > 1:
-            return Exception("Multiple users with same UUID")  # TODO: Handle better
-        user = users[0]
-        return cls(uuid=str(user.uuid), username=user.username, hash=user.hash)
+    def query(cls, session: Session, query: Dict[str, str]) -> List[_DBUser]:
+        return [x for x in session.query(_DBUser).filter_by(**query)]
 
-    def write(self):
-        session = Session()
+    def write(self, session: Session):
         session.add(self)
         session.commit()
-        session.close()
 
     uuid = Column(String, primary_key=True)
     username = Column(String)
-    hash = Column(LargeBinary)
+    hash = Column(String)
 
 
-class User(BaseUser, BaseModel):
+Base.metadata.create_all(engine)
+
+
+@dataclass
+class User(BaseUser):
     """
     The main class used to interface with user data.
     """
@@ -71,45 +83,37 @@ class User(BaseUser, BaseModel):
     uuid: UUID
     username: str
     hash: bytes
-
-    def write(self):
-        _DBUser.from_user(self).write()
+    _authenticated: bool = False
 
     @property
     def is_authenticated(self):
-        return True
+        return self._authenticated
 
     @property
     def display_name(self):
         return self.username
 
     @classmethod
-    def from_dbuser(cls, user: _DBUser):
-        print(user)
-        return cls(uuid=UUID(user.uuid), username=user.username, hash=user.hash)
+    def register(cls, username, password) -> "User":
+        pw_hash = pwd_context.hash(password)
+        return cls(uuid=uuid4(), username=username, hash=pw_hash)
 
+    @classmethod
+    def from_db(cls, **kwargs) -> Optional["User"]:
+        with session_manager() as session:
+            db_user = _DBUser.query_unique(session, kwargs)
+            if not db_user:
+                return
+            return db_user.to_user()
 
-Base.metadata.create_all(engine)
+    def write(self):
+        with session_manager() as session:
+            _DBUser.from_user(self).write(session)
 
+    def authenticate(self, password) -> bool:
+        if pwd_context.verify(password, self.hash):
+            self._authenticated = True
+        return self._authenticated
 
-# TODO: refactor out
-class Credentials(BaseModel):
-    """
-    Used to validate user-inputted credentials or register new accounts.
-    """
-
-    username: str
-    password: str
-
-    def register(self) -> User:
-        pw_hash = pwd_context.hash(self.password)
-        return User(uuid=uuid4(), username=self.username, hash=pw_hash)
-
-    def from_db(self) -> Optional[User]:
-        user = _DBUser.from_username(self.username)
-        if not user:
-            return
-        return User.from_dbuser(user)
-
-    def check_password(self, user: User) -> bool:
-        return pwd_context.verify(self.password, user.hash)
+    def set_authenticated(self, authenticated=True) -> bool:
+        self._authenticated = authenticated
