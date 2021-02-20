@@ -1,16 +1,10 @@
-from sqlalchemy import Boolean, Column, ForeignKey, Integer, String
+from typing import List
+
+from dataclasses import dataclass
+from sqlalchemy import Boolean, Column, ForeignKey, Integer
 from sqlalchemy.orm import Session, relationship
 
 from database import Base, NonUniqueException, engine, session_manager
-from dataclasses import dataclass
-
-from typing import List
-
-
-@dataclass
-class FriendRelationship:
-    friends: List[int]
-    confirmed: bool
 
 
 class Friend(Base):
@@ -26,23 +20,29 @@ class Friend(Base):
     @classmethod
     def find(cls, id: str) -> "Optional[List[FriendRelationship]]":
         with session_manager() as session:
-            friend_list = cls.query(id, session)
-            if not friend_list:
-                return
-            friends = []
-            for i in friend_list:
-                friends.append(
-                    FriendRelationship(
-                        friends=[i.user_id, i.friend_id], confirmed=i.confirmed
-                    )
-                )
-            return friends
+            return cls.query(id, session)
 
     @classmethod
     def query(cls, id: int, session: Session) -> "Optional[_Friend]":
-        sessions = [x for x in session.query(Friend).filter_by(user_id=id)]
-        sessions += [x for x in session.query(Friend).filter_by(friend_id=id)]
-        return sessions
+        friends = [x for x in session.query(Friend).filter_by(user_id=id)]
+        friends += [x for x in session.query(Friend).filter_by(friend_id=id)]
+        return friends
+
+    @classmethod
+    def query_both(
+        cls, user_id: int, friend_id: int, session: Session
+    ) -> "Optional[_Friend]":
+        friends = [
+            x
+            for x in session.query(Friend).filter_by(
+                user_id=user_id, friend_id=friend_id
+            )
+        ]
+        if len(friends) == 0:
+            return
+        if len(friends) > 1:
+            return NonUniqueException
+        return friends[0]
 
     def write(self, session: Session):
         session.add(self)

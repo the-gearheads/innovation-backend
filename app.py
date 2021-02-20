@@ -97,14 +97,35 @@ async def add_friend(request: Request, friend_form: FriendForm) -> JSONResponse:
     return renew(JSONResponse({"success": True}), request.user.token)
 
 
+@app.post("/accept_friend")
+@requires("authenticated")
+async def accept_friend(request: Request, friend_form: FriendForm) -> JSONResponse:
+    with session_manager() as session:
+        friend = Friend.query_both(
+            user_id=User.find(username=friend_form.username).id,
+            friend_id=request.user.id,
+            session=session,
+        )
+        friend.confirmed = True
+        friend.write(session=session)
+    return renew(JSONResponse({"success": True}))
+
+
 @app.get("/friends_list")
 @requires("authenticated")
 async def friends_list(request: Request) -> JSONResponse:
     friends = Friend.find(id=request.user.id) or []
     friends_list = []
     for friend in friends:
-        friend.friends.remove(request.user.id)
-        friend_id = friend.friends[0]
+        # if not accepted, don't show on requester's side
+        if friend.user_id == request.user.id and not friend.confirmed:
+            continue
+        if friend.user_id == request.user.id:
+            if not friend.confirmed:
+                continue
+            friend_id = friend.friend_id
+        else:
+            friend_id = friend.user_id
         friends_list.append(
             {
                 "id": friend_id,
@@ -140,9 +161,14 @@ def tests():  # ""tests""
 
     user = User.register("john", "password")
     user.write()
+    user2 = User.register("pog", "champ")
+    user2.write()
 
     user = User.find(username="john")
+    user2 = User.find(username="pog")
     token = user.new_token()
+
+    user.new_friend(user2.id)
 
     assert user.authenticate("password")
     assert User.from_db(SessionInfo.find(token)) == user

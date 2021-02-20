@@ -100,6 +100,8 @@ class User(BaseUser):
         from friend import Friend
 
         friend = Friend(user_id=self.id, friend_id=friend_id)
-        self.friends.append(friend)
         with session_manager() as session:
+            if Friend.query_both(user_id=self.id, friend_id=friend_id, session=session):
+                return
+            self.friends.append(friend)
             friend.write(session)
