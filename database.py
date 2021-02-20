@@ -37,6 +37,7 @@ class _DBUser(Base):
     username = Column(String)
     hash = Column(String)
     session_info = relationship("SessionInfo")
+    friends = relationship("Friend")
 
     @classmethod
     def from_user(cls, user: "User") -> "_DBUser":
@@ -45,6 +46,7 @@ class _DBUser(Base):
             username=user.username,
             hash=user.hash,
             session_info=user.session_info,
+            friends=user.friends,
         )
 
     @classmethod

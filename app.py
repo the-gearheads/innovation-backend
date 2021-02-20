@@ -16,8 +16,9 @@ from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import HTTPConnection, Request
 from starlette.responses import JSONResponse, Response
 
-from user import User, session_manager
 from session import SessionInfo
+from user import User, session_manager
+from friend import Friend
 
 
 class SessionAuth(AuthenticationBackend):
@@ -45,12 +46,16 @@ class Credentials(BaseModel):
     password: str
 
 
+class FriendForm(BaseModel):
+    username: str
+
+
 def renew(response: Response, token: str = None):
     if not token:
         return response
     # two week expiry
     response.set_cookie(
-        "session", token, max_age=(3600 * 24 * 14), same_site="none", secure=True
+        "session", token, max_age=(3600 * 24 * 14), samesite="none", secure=True
     )
     return response
 
@@ -84,6 +89,34 @@ async def get(request: Request) -> JSONResponse:
     return renew(JSONResponse({"success": True, "value": 10}), request.user.token)
 
 
+@app.post("/add_friend")
+@requires("authenticated")
+async def add_friend(request: Request, friend_form: FriendForm) -> JSONResponse:
+    id = User.find(username=friend_form.username).id
+    request.user.new_friend(id)
+    return renew(JSONResponse({"success": True}), request.user.token)
+
+
+@app.get("/friends_list")
+@requires("authenticated")
+async def friends_list(request: Request) -> JSONResponse:
+    friends = Friend.find(id=request.user.id) or []
+    friends_list = []
+    for friend in friends:
+        friend.friends.remove(request.user.id)
+        friend_id = friend.friends[0]
+        friends_list.append(
+            {
+                "id": friend_id,
+                "name": User.find(id=friend_id).username,
+                "confirmed": friend.confirmed,
+            }
+        )
+    return renew(
+        JSONResponse({"success": True, "friends": friends_list}), request.user.token
+    )
+
+
 @app.get("/logout")
 @requires("authenticated")
 async def logout(request: Request) -> JSONResponse:
@@ -104,6 +137,7 @@ def tests():  # ""tests""
     if TESTS:
         return
     TESTS = True
+
     user = User.register("john", "password")
     user.write()
 

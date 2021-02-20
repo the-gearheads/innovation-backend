@@ -21,6 +21,7 @@ class User(BaseUser):
     username: str
     hash: bytes
     session_info: "List[SessionInfo]"
+    friends: "List[Friend]"
 
     _authenticated: bool = False
     _auth_with: str = None
@@ -42,6 +43,7 @@ class User(BaseUser):
             username=db_user.username,
             hash=db_user.hash,
             session_info=list(db_user.session_info),
+            friends=list(db_user.friends),
         )
 
     @property
@@ -93,3 +95,11 @@ class User(BaseUser):
         with session_manager() as session:
             session_info.write(session)
         return token
+
+    def new_friend(self, friend_id: int):
+        from friend import Friend
+
+        friend = Friend(user_id=self.id, friend_id=friend_id)
+        self.friends.append(friend)
+        with session_manager() as session:
+            friend.write(session)
