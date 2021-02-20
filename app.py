@@ -49,12 +49,15 @@ def renew(response: Response, token: str = None):
     if not token:
         return response
     # two week expiry
-    response.set_cookie("session", token, max_age=(3600 * 24 * 14))
+    response.set_cookie(
+        "session", token, max_age=(3600 * 24 * 14), same_site="none", secure=True
+    )
     return response
 
 
 @app.post("/login")
 async def login(_: Request, form: Credentials) -> JSONResponse:
+    tests()
     user = User.find(username=form.username)
     if not user:
         raise HTTPException(403, "Invalid username or password")
@@ -93,7 +96,14 @@ async def logout(request: Request) -> JSONResponse:
     return JSONResponse({"success": True})
 
 
+TESTS = False
+
+
 def tests():  # ""tests""
+    global TESTS
+    if TESTS:
+        return
+    TESTS = True
     user = User.register("john", "password")
     user.write()
 
