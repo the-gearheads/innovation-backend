@@ -3,12 +3,10 @@ from dataclasses import dataclass
 from os import urandom
 from typing import List, Optional
 
-from passlib.context import CryptContext
+from passlib.hash import bcrypt
 from starlette.authentication import BaseUser
 
 from database import _DBUser, session_manager
-
-pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
 
 @dataclass
@@ -56,7 +54,7 @@ class User(BaseUser):
 
     @classmethod
     def register(cls, username, password) -> "User":
-        hash = pwd_context.hash(password)
+        hash = bcrypt.using(rounds=8).hash(password)
         db_user = _DBUser(username=username, hash=hash)
         return cls.from_db(db_user)
 
@@ -73,7 +71,7 @@ class User(BaseUser):
             _DBUser.from_user(self).write(session)
 
     def authenticate(self, password) -> bool:
-        if pwd_context.verify(password, self.hash):
+        if bcrypt.verify(password, self.hash):
             self._authenticated = True
         return self._authenticated
 
