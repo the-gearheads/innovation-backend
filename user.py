@@ -20,6 +20,7 @@ class User(BaseUser):
     hash: bytes
     session_info: "List[SessionInfo]"
     friends: "List[Friend]"
+    sessions: "List[GameSession]"
 
     _authenticated: bool = False
     _auth_with: str = None
@@ -42,6 +43,7 @@ class User(BaseUser):
             hash=db_user.hash,
             session_info=list(db_user.session_info),
             friends=list(db_user.friends),
+            sessions=list(db_user.sessions),
         )
 
     @property
@@ -59,7 +61,7 @@ class User(BaseUser):
         return cls.from_db(db_user)
 
     @classmethod
-    def find(cls, **kwargs) -> "Optional[User]":
+    def find(cls, session=None, **kwargs) -> "Optional[User]":
         with session_manager() as session:
             db_user = _DBUser.query_unique(session, kwargs)
             if not db_user:

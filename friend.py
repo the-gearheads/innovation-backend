@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 from dataclasses import dataclass
 from sqlalchemy import Boolean, Column, ForeignKey, Integer
@@ -18,12 +18,12 @@ class Friend(Base):
     user = relationship("_DBUser", back_populates="friends")
 
     @classmethod
-    def find(cls, id: str) -> "Optional[List[FriendRelationship]]":
+    def find(cls, id: str) -> "Optional[List[Friend]]":
         with session_manager() as session:
             return cls.query(id, session)
 
     @classmethod
-    def query(cls, id: int, session: Session) -> "Optional[_Friend]":
+    def query(cls, id: int, session: Session) -> "Optional[Friend]":
         friends = [x for x in session.query(Friend).filter_by(user_id=id)]
         friends += [x for x in session.query(Friend).filter_by(friend_id=id)]
         return friends

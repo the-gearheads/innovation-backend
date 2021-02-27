@@ -1,3 +1,5 @@
+from typing import List
+
 import uvicorn
 from fastapi import FastAPI
 from pydantic import BaseModel
@@ -16,9 +18,10 @@ from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import HTTPConnection, Request
 from starlette.responses import JSONResponse, Response
 
+from database import GameSession, _DBUser
+from friend import Friend
 from session import SessionInfo
 from user import User, session_manager
-from friend import Friend
 
 
 class SessionAuth(AuthenticationBackend):
@@ -48,6 +51,15 @@ class Credentials(BaseModel):
 
 class FriendForm(BaseModel):
     username: str
+
+
+class SessionCreateForm(BaseModel):
+    users: List[str]
+
+
+class AttackForm(BaseModel):
+    id: int
+    damage: int
 
 
 def renew(response: Response, token: str = None):
@@ -135,6 +147,42 @@ async def friends_list(request: Request) -> JSONResponse:
         )
     return renew(
         JSONResponse({"success": True, "friends": friends_list}), request.user.token
+    )
+
+
+@app.post("/create_session")
+@requires("authenticated")
+async def create_session(request: Request, form: SessionCreateForm):
+    users = []
+    with session_manager() as session:
+        for user in form.users:
+            user = _DBUser.query_unique(session, {"username": user})
+            users.append(user)
+        game_session = GameSession(users=users)
+        game_session.write(session)
+    return renew(JSONResponse({"success": True}), request.user.token)
+
+
+@app.post("/attack")
+@requires("authenticated")
+async def attack(request: Request, form: AttackForm):
+    with session_manager() as session:
+        game_session = GameSession.find(session, id=form.id)
+        game_session.bossHealth -= form.damage
+        game_session.write(session)
+        return renew(
+            JSONResponse({"success": True, **game_session.as_dict()}),
+            request.user.token,
+        )
+
+
+@app.get("/sessions")
+@requires("authenticated")
+async def create_session(request: Request):
+    sessions = [session.as_dict() for session in request.user.sessions]
+    return renew(
+        JSONResponse({"success": True, "sessions": sessions}),
+        request.user.token,
     )
 
 
