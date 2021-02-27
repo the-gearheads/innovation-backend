@@ -85,6 +85,7 @@ class GameSession(Base):
     __tablename__ = "gamesessions"
 
     id = Column(Integer, primary_key=True)
+    name = Column(String)
     bossHealth = Column(Integer, default=1000)
     partyHealth = Column(Integer, default=1000)
 
@@ -109,6 +110,7 @@ class GameSession(Base):
     def as_dict(self):
         return {
             "id": self.id,
+            "name": self.name,
             "bossHealth": self.bossHealth,
             "partyHealth": self.partyHealth,
             "users": [user.username for user in self.users],

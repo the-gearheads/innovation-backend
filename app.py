@@ -1,5 +1,8 @@
 from typing import List
+from time import sleep
+from threading import Thread
 
+import schedule
 import uvicorn
 from fastapi import FastAPI
 from pydantic import BaseModel
@@ -55,6 +58,7 @@ class FriendForm(BaseModel):
 
 class SessionCreateForm(BaseModel):
     users: List[str]
+    name: str
 
 
 class AttackForm(BaseModel):
@@ -93,12 +97,6 @@ async def register(form: Credentials) -> JSONResponse:
     user = User.register(form.username, form.password)
     user.write()
     return JSONResponse({"success": True})
-
-
-@app.get("/get")
-@requires("authenticated")
-async def get(request: Request) -> JSONResponse:
-    return renew(JSONResponse({"success": True, "value": 10}), request.user.token)
 
 
 @app.post("/add_friend")
@@ -158,7 +156,8 @@ async def create_session(request: Request, form: SessionCreateForm):
         for user in form.users:
             user = _DBUser.query_unique(session, {"username": user})
             users.append(user)
-        game_session = GameSession(users=users)
+        users.append(_DBUser.query_unique(session, {"username": request.user.username}))
+        game_session = GameSession(name=form.name, users=users)
         game_session.write(session)
     return renew(JSONResponse({"success": True}), request.user.token)
 
@@ -178,7 +177,7 @@ async def attack(request: Request, form: AttackForm):
 
 @app.get("/sessions")
 @requires("authenticated")
-async def create_session(request: Request):
+async def sessions(request: Request):
     sessions = [session.as_dict() for session in request.user.sessions]
     return renew(
         JSONResponse({"success": True, "sessions": sessions}),
