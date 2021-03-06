@@ -122,18 +122,14 @@ class GameSession(Base):
 
     @property
     def partyHealth(self):
-        # day = 24 * 60 * 60
-        day = 1
+        day = 24 * 60 * 60
         delta = time() - self.startTime
-        return 1000 - (200 * floor(delta / day))
+        return 1000 - (100 * floor(delta / day))
 
     def check_status(self):
         if self.partyHealth > 0:
             return True
         with session_manager() as session:
-            self.users.clear()
-            # for user in self.users:
-            #     user.write(session)
             self.delete(session)
         return False
 
@@ -142,6 +138,7 @@ class GameSession(Base):
         session.commit()
 
     def delete(self, session: Session):
+        self.users.clear()
         session.add(self)
         session.delete(self)
         session.commit()

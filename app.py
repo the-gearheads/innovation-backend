@@ -182,11 +182,28 @@ async def attack(request: Request, form: AttackForm):
     with session_manager() as session:
         game_session = GameSession.find(session, id=form.id)
         game_session.bossHealth -= form.damage
+        if game_session.bossHealth <= 0:
+            for user in game_session.users:
+                user.points += 100
+            game_session.delete(session)
+            return renew(
+                JSONResponse({"success": True}),
+                request.user.token,
+            )
         game_session.write(session)
         return renew(
             JSONResponse({"success": True, **game_session.as_dict()}),
             request.user.token,
         )
+
+
+@app.get("/points")
+@requires("authenticated")
+async def points(request: Request):
+    return renew(
+        JSONResponse({"success": True, "points": request.user.points}),
+        request.user.token,
+    )
 
 
 @app.get("/sessions")
