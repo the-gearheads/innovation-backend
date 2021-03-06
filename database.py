@@ -51,6 +51,7 @@ class _DBUser(Base):
         "GameSession", secondary=session_users, back_populates="users"
     )
     points = Column(Integer, default=0)
+    avatar = Column(String, default="default")  # url to avatar
 
     @classmethod
     def from_user(cls, user: "User") -> "_DBUser":
@@ -62,6 +63,7 @@ class _DBUser(Base):
             friends=user.friends,
             sessions=user.sessions,
             points=user.points,
+            avatar=user.avatar,
         )
 
     @classmethod

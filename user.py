@@ -4,6 +4,7 @@ from os import urandom
 from typing import List, Optional
 
 from passlib.hash import bcrypt
+from sqlalchemy.orm.attributes import flag_dirty
 from starlette.authentication import BaseUser
 
 from database import _DBUser, session_manager
@@ -22,6 +23,7 @@ class User(BaseUser):
     friends: "List[Friend]"
     sessions: "List[GameSession]"
     points: int
+    avatar: str
 
     _authenticated: bool = False
     _auth_with: str = None
@@ -46,6 +48,7 @@ class User(BaseUser):
             friends=list(db_user.friends),
             sessions=list(db_user.sessions),
             points=db_user.points,
+            avatar=db_user.avatar,
         )
 
     @property
@@ -72,7 +75,8 @@ class User(BaseUser):
 
     def write(self):
         with session_manager() as session:
-            _DBUser.from_user(self).write(session)
+            user = _DBUser.from_user(self)
+            user.write(session)
 
     def authenticate(self, password) -> bool:
         if bcrypt.verify(password, self.hash):

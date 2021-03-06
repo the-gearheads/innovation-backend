@@ -2,7 +2,6 @@ from typing import List
 from time import sleep
 from threading import Thread
 
-import schedule
 import uvicorn
 from fastapi import FastAPI
 from pydantic import BaseModel
@@ -66,12 +65,17 @@ class AttackForm(BaseModel):
     damage: int
 
 
+class BuyForm(BaseModel):
+    avatar: str
+    price: int
+
+
 def renew(response: Response, token: str = None):
     if not token:
         return response
     # two week expiry
     response.set_cookie(
-        "session", token, max_age=(3600 * 24 * 14), samesite="none", secure=False
+        "session", token, max_age=(3600 * 24 * 14), samesite="none", secure=True
     )
     return response
 
@@ -103,6 +107,14 @@ async def register(form: Credentials) -> JSONResponse:
 @requires("authenticated")
 async def add_friend(request: Request, friend_form: FriendForm) -> JSONResponse:
     id = User.find(username=friend_form.username).id
+    with session_manager() as session:
+        friend = Friend.query_both(
+            user_id=User.find(username=friend_form.username).id,
+            friend_id=request.user.id,
+            session=session,
+        )
+    if friend:
+        return renew(JSONResponse({"success": False}), request.user.token)
     request.user.new_friend(id)
     return renew(JSONResponse({"success": True}), request.user.token)
 
@@ -149,11 +161,13 @@ async def friends_list(request: Request) -> JSONResponse:
             friend_id = friend.friend_id
         else:
             friend_id = friend.user_id
+        user = User.find(id=friend_id)
         friends_list.append(
             {
                 "id": friend_id,
-                "name": User.find(id=friend_id).username,
+                "name": user.username,
                 "confirmed": friend.confirmed,
+                "avatar": user.avatar,
             }
         )
     return renew(
@@ -202,6 +216,34 @@ async def attack(request: Request, form: AttackForm):
 async def points(request: Request):
     return renew(
         JSONResponse({"success": True, "points": request.user.points}),
+        request.user.token,
+    )
+
+
+@app.post("/buy")
+@requires("authenticated")
+async def buy(request: Request, form: BuyForm):
+    if form.price > request.user.points:
+        return renew(
+            JSONResponse({"success": False}),
+            request.user.token,
+        )
+    with session_manager() as session:
+        user = _DBUser.query_unique(session, {"id": request.user.id})
+        user.points -= form.price
+        user.avatar = form.avatar
+        user.write(session)
+    return renew(
+        JSONResponse({"success": True}),
+        request.user.token,
+    )
+
+
+@app.get("/avatar")
+@requires("authenticated")
+async def avatar(request: Request):
+    return renew(
+        JSONResponse({"success": True, "avatar": request.user.avatar}),
         request.user.token,
     )
 
