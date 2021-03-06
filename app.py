@@ -71,7 +71,7 @@ def renew(response: Response, token: str = None):
         return response
     # two week expiry
     response.set_cookie(
-        "session", token, max_age=(3600 * 24 * 14), samesite="none", secure=True
+        "session", token, max_age=(3600 * 24 * 14), samesite="none", secure=False
     )
     return response
 
@@ -121,6 +121,19 @@ async def accept_friend(request: Request, friend_form: FriendForm) -> JSONRespon
     return renew(JSONResponse({"success": True}))
 
 
+@app.post("/deny_friend")
+@requires("authenticated")
+async def deny_friend(request: Request, friend_form: FriendForm) -> JSONResponse:
+    with session_manager() as session:
+        friend = Friend.query_both(
+            user_id=User.find(username=friend_form.username).id,
+            friend_id=request.user.id,
+            session=session,
+        )
+        friend.delete(session=session)
+    return renew(JSONResponse({"success": True}))
+
+
 @app.get("/friends_list")
 @requires("authenticated")
 async def friends_list(request: Request) -> JSONResponse:
@@ -156,6 +169,7 @@ async def create_session(request: Request, form: SessionCreateForm):
         for user in form.users:
             user = _DBUser.query_unique(session, {"username": user})
             users.append(user)
+            user.write(session)
         users.append(_DBUser.query_unique(session, {"username": request.user.username}))
         game_session = GameSession(name=form.name, users=users)
         game_session.write(session)
@@ -178,7 +192,10 @@ async def attack(request: Request, form: AttackForm):
 @app.get("/sessions")
 @requires("authenticated")
 async def sessions(request: Request):
-    sessions = [session.as_dict() for session in request.user.sessions]
+    sessions = []
+    for session in request.user.sessions:
+        if session.check_status():
+            sessions.append(session.as_dict())
     return renew(
         JSONResponse({"success": True, "sessions": sessions}),
         request.user.token,

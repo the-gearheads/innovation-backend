@@ -21,6 +21,7 @@ class User(BaseUser):
     session_info: "List[SessionInfo]"
     friends: "List[Friend]"
     sessions: "List[GameSession]"
+    points: int
 
     _authenticated: bool = False
     _auth_with: str = None
@@ -44,6 +45,7 @@ class User(BaseUser):
             session_info=list(db_user.session_info),
             friends=list(db_user.friends),
             sessions=list(db_user.sessions),
+            points=db_user.points,
         )
 
     @property

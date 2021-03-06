@@ -1,7 +1,9 @@
 from contextlib import contextmanager
+from math import floor
+from time import time
 from typing import Dict, List, Optional
 
-from sqlalchemy import Column, ForeignKey, Integer, String, Table, create_engine
+from sqlalchemy import Column, Float, ForeignKey, Integer, String, Table, create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session, relationship
 
@@ -48,6 +50,7 @@ class _DBUser(Base):
     sessions = relationship(
         "GameSession", secondary=session_users, back_populates="users"
     )
+    points = Column(Integer, default=0)
 
     @classmethod
     def from_user(cls, user: "User") -> "_DBUser":
@@ -58,6 +61,7 @@ class _DBUser(Base):
             session_info=user.session_info,
             friends=user.friends,
             sessions=user.sessions,
+            points=user.points,
         )
 
     @classmethod
@@ -87,7 +91,7 @@ class GameSession(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String)
     bossHealth = Column(Integer, default=1000)
-    partyHealth = Column(Integer, default=1000)
+    startTime = Column(Float, default=time)
 
     users = relationship(
         "_DBUser", secondary=session_users, back_populates="sessions", lazy="joined"
@@ -116,11 +120,29 @@ class GameSession(Base):
             "users": [user.username for user in self.users],
         }
 
+    @property
+    def partyHealth(self):
+        # day = 24 * 60 * 60
+        day = 1
+        delta = time() - self.startTime
+        return 1000 - (200 * floor(delta / day))
+
+    def check_status(self):
+        if self.partyHealth > 0:
+            return True
+        with session_manager() as session:
+            self.users.clear()
+            # for user in self.users:
+            #     user.write(session)
+            self.delete(session)
+        return False
+
     def write(self, session: Session):
         session.add(self)
         session.commit()
 
     def delete(self, session: Session):
+        session.add(self)
         session.delete(self)
         session.commit()
 
