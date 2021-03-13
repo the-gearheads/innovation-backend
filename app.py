@@ -56,6 +56,10 @@ class FriendForm(BaseModel):
     username: str
 
 
+class AvatarForm(BaseModel):
+    username: str
+
+
 class SessionCreateForm(BaseModel):
     users: List[str]
     name: str
@@ -246,9 +250,10 @@ async def buy(request: Request, form: BuyForm):
 
 @app.get("/avatar")
 @requires("authenticated")
-async def avatar(request: Request):
+async def avatar(request: Request, form: AvatarForm):
+    avatar = User.find(username=form.username).avatar
     return renew(
-        JSONResponse({"success": True, "avatar": request.user.avatar}),
+        JSONResponse({"success": True, "avatar": avatar}),
         request.user.token,
     )
 
