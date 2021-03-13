@@ -1,6 +1,7 @@
-from typing import List
-from time import sleep
+import csv
 from threading import Thread
+from time import sleep
+from typing import List
 
 import uvicorn
 from fastapi import FastAPI
@@ -20,7 +21,7 @@ from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import HTTPConnection, Request
 from starlette.responses import JSONResponse, Response
 
-from database import GameSession, _DBUser
+from database import GameSession, _DBUser, Exercise
 from friend import Friend
 from session import SessionInfo
 from user import User, session_manager
@@ -58,6 +59,7 @@ class FriendForm(BaseModel):
 class SessionCreateForm(BaseModel):
     users: List[str]
     name: str
+    tag: str
 
 
 class AttackForm(BaseModel):
@@ -185,9 +187,12 @@ async def create_session(request: Request, form: SessionCreateForm):
             users.append(user)
             user.write(session)
         users.append(_DBUser.query_unique(session, {"username": request.user.username}))
-        game_session = GameSession(name=form.name, users=users)
+        game_session = GameSession(name=form.name, users=users, tag=form.tag)
         game_session.write(session)
-    return renew(JSONResponse({"success": True}), request.user.token)
+        return renew(
+            JSONResponse({"success": True, **game_session.as_dict()}),
+            request.user.token,
+        )
 
 
 @app.post("/attack")
@@ -276,11 +281,27 @@ async def logout(request: Request) -> JSONResponse:
 TESTS = False
 
 
+def exercise_database():
+    with open("exercises.csv") as file:
+        reader = csv.DictReader(file)
+        exercises = []
+        with session_manager() as session:
+            for row in reader:
+                difficulty = row["difficulty"].lower()
+                tags = row["tags"].split("|")
+                exercise = Exercise.create(row["name"], tags, difficulty)
+                exercise.write(session)
+                exercises.append(exercise)
+            print(exercises)
+
+
 def tests():  # ""tests""
     global TESTS
     if TESTS:
         return
     TESTS = True
+
+    exercise_database()
 
     user = User.register("john", "password")
     user.write()

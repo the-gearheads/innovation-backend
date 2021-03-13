@@ -3,7 +3,16 @@ from math import floor
 from time import time
 from typing import Dict, List, Optional
 
-from sqlalchemy import Column, Float, ForeignKey, Integer, String, Table, create_engine
+from sqlalchemy import (
+    Boolean,
+    Column,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Table,
+    create_engine,
+)
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session, relationship
 
@@ -94,6 +103,7 @@ class GameSession(Base):
     name = Column(String)
     bossHealth = Column(Integer, default=1000)
     startTime = Column(Float, default=time)
+    tag = Column(String)
 
     users = relationship(
         "_DBUser", secondary=session_users, back_populates="sessions", lazy="joined"
@@ -120,7 +130,25 @@ class GameSession(Base):
             "bossHealth": self.bossHealth,
             "partyHealth": self.partyHealth,
             "users": [user.username for user in self.users],
+            **self.exercises,
         }
+
+    @property
+    def exercises(self) -> Dict:
+        tag = {self.tag: True}
+        exercises = {}
+        with session_manager() as session:
+            exercises["beginner"] = [
+                x.name for x in Exercise.query(session, difficulty="beginner", **tag)
+            ]
+            exercises["intermediate"] = [
+                x.name
+                for x in Exercise.query(session, difficulty="intermediate", **tag)
+            ]
+            exercises["advanced"] = [
+                x.name for x in Exercise.query(session, difficulty="advanced", **tag)
+            ]
+            return exercises
 
     @property
     def partyHealth(self):
@@ -144,6 +172,42 @@ class GameSession(Base):
         session.add(self)
         session.delete(self)
         session.commit()
+
+
+class Exercise(Base):
+    __tablename__ = "exercises"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String)
+    difficulty = Column(String)
+    core = Column(Boolean)
+    lower_body = Column(Boolean)
+    upper_body = Column(Boolean)
+    balance = Column(Boolean)
+    cardiovascular = Column(Boolean)
+
+    @classmethod
+    def create(cls, name, tags, difficulty) -> "Exercise":
+        return cls(
+            name=name,
+            difficulty=difficulty,
+            core="C" in tags,
+            lower_body="L" in tags,
+            upper_body="U" in tags,
+            balance="B" in tags,
+            cardiovascular="V" in tags,
+        )
+
+    @classmethod
+    def query(cls, session: Session, **kwargs) -> "List[Exercise]":
+        return [x for x in session.query(Exercise).filter_by(**kwargs)]
+
+    def write(self, session: Session):
+        session.add(self)
+        session.commit()
+
+    def __repr__(self):
+        return f"<Exercise {self.name}/{self.difficulty}>"
 
 
 Base.metadata.create_all(engine)
