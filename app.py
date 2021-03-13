@@ -292,7 +292,6 @@ def exercise_database():
                 exercise = Exercise.create(row["name"], tags, difficulty)
                 exercise.write(session)
                 exercises.append(exercise)
-            print(exercises)
 
 
 def tests():  # ""tests""

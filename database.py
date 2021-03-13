@@ -130,6 +130,7 @@ class GameSession(Base):
             "bossHealth": self.bossHealth,
             "partyHealth": self.partyHealth,
             "users": [user.username for user in self.users],
+            "tag": self.tag,
             **self.exercises,
         }
 
