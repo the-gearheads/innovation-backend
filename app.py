@@ -248,7 +248,7 @@ async def buy(request: Request, form: BuyForm):
     )
 
 
-@app.get("/avatar")
+@app.post("/avatar")
 @requires("authenticated")
 async def avatar(request: Request, form: AvatarForm):
     avatar = User.find(username=form.username).avatar
